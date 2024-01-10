@@ -1,0 +1,6 @@
+storage_dir: './storage'
+file_parts_dir: './file_parts'
+retrieved_files_dir: './retrieved_files'
+io_process_count: 4
+max_memory_usage: 1024
+part_size: 1
