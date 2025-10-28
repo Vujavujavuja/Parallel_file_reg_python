@@ -1,88 +1,61 @@
-# Paralelni Algoritmi, prvi projekat,2023
+# Parallel File System
 
-## Studenti
-Nemanja Vujic 63/21RN
+## Project Overview
 
-## Urađeno
-Registar fajlova: fileregistry.py, file_registry u main.py
-  Jedinstveni File ID preko uuid4
-  Status fajla (ready i not ready)
-  Naziv fajla
-  Delovi tog fajla
-  
-Registar delova: partregistry.py, part_registry u main.py
-  Jedinstveni Part ID
-  md5hash
-  Status dela (ready i not ready)
-  
-Nit za prihvatanje komandi
-  put <file name>
-  get <file_id>
-  delete <file_id>
-  list
-  exit
-  help
+This is a simple proof-of-concept for a **parallel file system** interface. Basically, it takes a file, breaks it into pieces, stores those pieces across the system using multiple processes, and then can put it back together later. It's built for **basic concurrency** and not losing data (mostly). We built the simple stuff: `put`, `get`, and `delete`.
 
-Nit za obradu komandi
-  Kad god se pozove neka komanda stvara se novi thread primer:
-    thread = threading.Thread(target=get, args=(file_id,))
-              thread.start()
-              threads.append(thread)
+If you need to move big files fast, this is where you start.
 
-Procesi I/O
-  Uz multiprocessing.Pool
+***
 
-Komande
-  put
-    Prosledjuje se jeinstveni id
-    Cita fajl deo po deo i dodlejuje part ID
-    Dodaje delove u part_registry
-    Delove prosledjuje u grupi na I/O proces
-    Racuna md5
-    Fajl sa istim imenom moze da se doda vise puta sa drugacijim IDom 
-  get
-    Pronalazi fajl u file_registry uz file_id
-    Uzima listu delova
-    Salje listu u I/O
-  delete
-    Pronalazi fajl i promeni status na not ready
-    Pronalazi delove vezane za taj fajl i njih isto oznaci sa not ready
-    Salje na I/O sa zahtevom za vrisanje
-    Brise delove iz registra delova
-    Brise delove iz storage_dir
-    Brise fajl iz registra fajlova
-  list
-    Ispisjue listu file_id-ova imena i statusa fajlova iz file_registry-a
-  exit
-    Gasi niti
-    izlazi 
-    
-Sistem bi trebalo  da moze da procesira vise komandi, i vodi racuna o zauzetoj memoriji uz MAX_MEMORY_LIMIT i current_memory_usage
-Sistem vodi evidenciju koliko delova fajlova je u memoriji
-(MAX_MEMORY nije u config.yaml vec na vrhu main.py)
+## ⚙️ How It Works (The Bare Minimum)
 
-## AI
-Povezivanje Visual Studio Code-a sa GitHub-om
+We use Python's built-in tools to handle the heavy lifting. The core principle is "divide and conquer."
 
-Traceback (most recent call last):
-  File "C:\Users\necav\PycharmProjects\paralelni-algoritmi-prvi-projekat-tim_nemanjavujic\loader.py", line 9, in <module>
-    config = load_config()
-             ^^^^^^^^^^^^^
-  File "C:\Users\necav\PycharmProjects\paralelni-algoritmi-prvi-projekat-tim_nemanjavujic\loader.py", line 5, in load_config
-    config = yaml.load(f)
-             ^^^^^^^^^^^^
-TypeError: load() missing 1 required positional argument: 'Loader
+### Key Mechanisms
 
-Exception in thread Thread-5 (delete):
-Traceback (most recent call last):
-  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.1776.0_x64__qbz5n2kfra8p0\Lib\threading.py", line 1045, in _bootstrap_inner
-    self.run()
-  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.1776.0_x64__qbz5n2kfra8p0\Lib\threading.py", line 982, in run
-    self._target(*self._args, **self._kwargs)
-  File "C:\Users\necav\PycharmProjects\paralelni-algoritmi-prvi-projekat-tim_nemanjavujic\app\main.py", line 132, in delete
-    prats_from_file = file_registry.files[file_id]['parts']
-                      ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
-KeyError: '1'
+* **File Partitioning:** When you run `put`, the file gets split into fixed-size chunks (parts).
+* **Parallel Processing:** We use a **multiprocessing pool** (equal to your CPU count) to handle the parts concurrently. Each part is processed and stored independently.
+* **Concurrency Control:** We use a **threading condition** (`memory_usage_lock`) to enforce a **Max Memory Limit** and prevent the system from exploding while loading parts into memory. Threads wait their turn if memory is tight.
+* **Data Integrity:** Each file part gets a **unique ID**, and we track its **MD5 hash** during storage. If the hash doesn't match on retrieval, we know something went wrong, and we skip the bad part.
 
-Unresolved attribute reference 'notify_all' for class 'Lock' 
-Unresolved attribute reference 'wait' for class 'Lock'
+### Registry
+
+We use two simple registry classes (`FileRegistry` and `PartRegistry`) to track everything, since we can't just trust the file paths alone:
+
+1.  **File Registry:** Tracks the file name, its status, and the list of part IDs that belong to it.
+2.  **Part Registry:** Tracks the location, status, and MD5 hash for every individual file part.
+
+***
+
+## 🚀 Usage
+
+You interact with the system via a basic command-line loop.
+
+### Commands
+
+| Command | Action | Notes |
+| :--- | :--- | :--- |
+| **`put <file_path>`** | Stores a file in the system. Runs in a new thread. | Breaks file into parts, processes them in parallel. |
+| **`get <file_id>`** | Retrieves a file by its ID. Runs in a new thread. | Reconstructs the file from its parts in parallel. |
+| **`delete <file_id>`** | Removes a file and all its parts. Runs in a new thread. | Deletes all associated parts in parallel. |
+| **`list`** | Shows all files currently tracked by the system. | Prints ID, name, and current status. |
+| **`exit`** | Shuts down the system and waits for all active operations to finish. | Don't forget to wait. |
+
+### Example
+
+```bash
+put /path/to/my/big/data.file
+list
+get 1
+```
+## 📦 Setup & Dependencies
+It's all Python. Just make sure the stuff in the import list is installed, especially process, storage.*, and loader, which are assumed to be separate files you have lying around.
+
+os, threading, multiprocessing (Standard Python)
+
+zlib, hashlib, uuid (Standard Python)
+
+External: process.py, storage/fileregistry.py, storage/partregistry.py, loader.py
+
+This project is not production-ready; it's just a sandbox to understand the parallel processing concepts. Don't use it for anything important.
